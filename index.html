@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-slate-950">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AzuTool - 全球公司发现工具</title>
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#f59e0b" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://via.placeholder.com">
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+    <link rel="dns-prefetch" href="https://via.placeholder.com">
+    <!-- Preload critical fonts to prevent FOUT -->
+    <link rel="preload" href="https://fonts.gstatic.com/s/zcoolkuaile/v15/AДобx-23-4vj2w2t6nL8-Qws5if4Jw.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://fonts.gstatic.com/s/vt323/v17/pxiKyp0ihIEF2isQFJXGdg.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['ui-sans-serif', 'system-ui', 'sans-serif'],
+              pixel: ['VT323', 'monospace'],
+              anime: ['"ZCOOL KuaiLe"', 'cursive'],
+            },
+          },
+        },
+      }
+    </script>
+    <style>
+      :root {
+        --theme-color: #f59e0b; /* Default: amber-500 */
+      }
+      /* Custom scrollbar for a more modern look */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1e293b; /* slate-800 */
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #475569; /* slate-600 */
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #64748b; /* slate-500 */
+      }
+      #background-container, #background-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        transition: all 0.5s ease-in-out;
+      }
+      #background-container {
+        z-index: -2;
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+      }
+      /* 响应式默认背景 */
+      .default-bg-responsive {
+        background-image: url('/default-bg.jpg'); /* 默认竖屏 */
+      }
+      @media (min-aspect-ratio: 1/1) {
+        .default-bg-responsive {
+          background-image: url('/default-bg-landscape.jpg'); /* 横屏时自动切换 */
+        }
+      }
+      #background-overlay {
+        z-index: -1;
+        background-color: #0f172a; /* slate-900 */
+      }
+      .bg-1 {
+        background-image: radial-gradient(circle at 10% 20%, rgba(51, 65, 85, 0.5) 0%, transparent 50%), 
+                          radial-gradient(circle at 80% 90%, rgba(30, 41, 59, 0.7) 0%, transparent 40%);
+      }
+      .bg-2 {
+        background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                          linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+        background-size: 2rem 2rem;
+      }
+      .bg-3 {
+        background-image: url('data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%2392e8e6" fill-opacity="0.12"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');
+      }
+      .bg-4 {
+        background-image: url('data:image/svg+xml,%3Csvg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="%23a5b4fc" fill-opacity="0.05" fill-rule="evenodd"%3E%3Cpath d="M5 0h1L0 6V5zM6 5v1H5z"/%3E%3C/g%3E%3C/svg%3E');
+      }
+      @keyframes fadeInDown {
+        from {
+          opacity: 0;
+          transform: translateY(-15px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-fade-in-down {
+        animation: fadeInDown 0.5s cubic-bezier(0.215, 0.610, 0.355, 1.000) forwards;
+      }
+      @keyframes fadeOutUp {
+        from {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+      }
+      .animate-fade-out-up {
+        animation: fadeOutUp 0.3s ease-out forwards;
+      }
+      @keyframes card-entry {
+        from {
+          opacity: 0;
+          transform: translateY(20px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      .card-entry {
+        opacity: 0;
+        animation: card-entry 0.6s cubic-bezier(0.215, 0.610, 0.355, 1.000) forwards;
+      }
+       /* Simple fade-in animation for media cards */
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .animate-fade-in {
+        opacity: 0; /* Set initial state for animation */
+        animation: fadeIn 0.6s ease-out forwards;
+      }
+      @keyframes animated-gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      .text-vip-animated-gradient {
+        background: linear-gradient(90deg, #FDE047, #F59E0B, #FDE047);
+        background-size: 200% 200%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: animated-gradient 3s ease infinite;
+      }
+      
+      /* --- START Easter Egg Cool Styles --- */
+       @keyframes cool-animated-gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      .text-cool-animated-gradient {
+        background: linear-gradient(90deg, #ff7e5f, #feb47b, #86A8E7, #91EAE4, #ff7e5f);
+        background-size: 300% 300%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: cool-animated-gradient 5s ease infinite;
+      }
+      .text-title-cool {
+        text-shadow: 0 0 8px var(--theme-color), 0 0 16px rgba(255,255,255,0.5);
+        transition: text-shadow 0.5s ease-in-out;
+      }
+      /* --- END Easter Egg Cool Styles --- */
+
+      /* --- START Particle Effect Styles --- */
+      @keyframes particle-animation {
+        from {
+          transform: translate(-50%, -50%) rotate(0deg) translateY(0) scale(1);
+          opacity: 1;
+        }
+        to {
+          transform: translate(-50%, -50%) rotate(var(--angle)) translateY(var(--distance)) scale(0);
+          opacity: 0;
+        }
+      }
+      @keyframes particle-animation-alt {
+        0% {
+          transform: translate(-50%, -50%) scale(1);
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.8;
+        }
+        100% {
+          transform: translate(-50%, -50%) translateY(calc(var(--distance) * 1.2px)) scale(0);
+          opacity: 0;
+        }
+      }
+      .particle {
+        position: fixed;
+        left: var(--x);
+        top: var(--y);
+        width: var(--size);
+        height: var(--size);
+        background-color: var(--theme-color);
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 9999;
+        animation: particle-animation 900ms ease-out forwards;
+        box-shadow: 0 0 8px var(--theme-color), 0 0 12px var(--theme-color);
+        filter: blur(1px);
+      }
+      .particle.particle--alt {
+          animation-name: particle-animation-alt;
+          animation-duration: 1000ms;
+          background-color: #ffffff;
+          box-shadow: 0 0 8px #ffffff, 0 0 12px #ffffff;
+      }
+      /* --- END Particle Effect Styles --- */
+
+      /* --- START Sakura Petal Effect --- */
+      #sakura-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0; /* Position it above the background but below the content */
+        overflow: hidden;
+      }
+      .petal {
+        position: absolute;
+        top: -10%;
+        border-radius: 150px 0 150px 0;
+        animation: fall linear infinite;
+        opacity: 0;
+      }
+      @keyframes fall {
+        0% {
+          transform: translateY(0) translateX(0) rotate(0deg);
+          opacity: 1;
+        }
+        100% {
+          transform: translateY(110vh) translateX(var(--sway)) rotate(var(--rotation));
+          opacity: 0;
+        }
+      }
+      /* --- END Sakura Petal Effect --- */
+    </style>
+  </head>
+  <body class="text-slate-200">
+    <div id="background-container"></div>
+    <div id="background-overlay"></div>
+    <div id="sakura-container"></div>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

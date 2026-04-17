@@ -1,0 +1,23 @@
+{
+  "name": "AzuTool PWA",
+  "short_name": "AzuTool",
+  "description": "多功能采集与创作工具, 丝滑体验",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjMyIiBmaWxsPSIjMGYxNzJhIi8+PHBhdGggZD0iTTk2IDI0TDMyIDE2OGgyOGwxNS00MGg1MGwxNSA0MGgyOEw5NiAyNHptLTQgMjhsMjggNzZoLTU2bDI4LTc2eiIgZmlsbD0iI2Y1OWUwYiIvPjwvc3ZnPg==",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9Ijg1IiBmaWxsPSIjMGYxNzJhIi8+PHBhdGggZD0iTTI1NiA2NEw4NSA0NDhoNzVsNDAtMTA3aDEzNGw0MCAxMDdoNzVMMjU2IDY0em0tMTEgNzVsNzUgMjAzSDE3MGw3NS0yMDN6IiBmaWxsPSIjZjU5ZTBiIi8+PC9zdmc+",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
