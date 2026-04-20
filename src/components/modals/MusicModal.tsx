@@ -99,7 +99,16 @@ const MusicModal: React.FC<MusicModalProps> = ({ isOpen, onClose }) => {
                 if (!audioRef.current) return;
                 
                 switch (action) {
-                    case 'play': audioRef.current.play(); setIsPlaying(true); break;
+                    case 'play': {
+                        const playPromise = audioRef.current.play();
+                        if (playPromise !== undefined) {
+                            playPromise.catch(e => {
+                                if (e.name !== 'AbortError') console.warn('SSE Play interrupted:', e);
+                            });
+                        }
+                        setIsPlaying(true); 
+                        break;
+                    }
                     case 'pause': audioRef.current.pause(); setIsPlaying(false); break;
                     case 'volume': audioRef.current.volume = Number(data) / 100; break;
                     case 'mute': audioRef.current.muted = Boolean(data); break;
@@ -144,7 +153,12 @@ const MusicModal: React.FC<MusicModalProps> = ({ isOpen, onClose }) => {
                 audioRef.current?.pause();
                 setIsPlaying(false);
             } else {
-                audioRef.current?.play();
+                const playPromise = audioRef.current?.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(e => {
+                        if (e.name !== 'AbortError') console.warn('Play interrupted:', e);
+                    });
+                }
                 setIsPlaying(true);
             }
             return;
@@ -196,8 +210,8 @@ const MusicModal: React.FC<MusicModalProps> = ({ isOpen, onClose }) => {
             }
         }
 
-        if (!finalUrl) {
-            showToast("无法获取播放链接");
+        if (!finalUrl || finalUrl.startsWith('javascript:')) {
+            showToast("无法获取有效的播放链接");
             return;
         }
 
@@ -213,11 +227,17 @@ const MusicModal: React.FC<MusicModalProps> = ({ isOpen, onClose }) => {
             
             audioRef.current.src = proxyPlayUrl;
             audioRef.current.load(); // Force reset state
-            audioRef.current.play().catch(err => {
-                console.error("Playback error:", err);
-                showToast("播放失败：服务器拦截或链接失效");
-                setIsPlaying(false);
-            });
+            const playPromise = audioRef.current.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(err => {
+                    // Ignore "AbortError" (interrupted by pause or new load)
+                    if (err.name === 'AbortError') return;
+                    
+                    console.error("Playback error:", err);
+                    showToast("播放失败：服务器拦截或链接失效");
+                    setIsPlaying(false);
+                });
+            }
         }
         
         // Update results list with the metadata we just found
@@ -394,9 +414,9 @@ const MusicModal: React.FC<MusicModalProps> = ({ isOpen, onClose }) => {
                 {/* Results List */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-2">
                     {results.length > 0 ? (
-                        results.map((song) => (
+                        results.map((song, index) => (
                             <div 
-                                key={song.id + song.source}
+                                key={`${song.id + song.source}-${index}`}
                                 className={`flex items-center gap-3 p-3 rounded-2xl border transition-all group ${playingSong?.id === song.id && playingSong?.source === song.source ? 'bg-slate-800/50 border-[var(--theme-color)]/30' : 'bg-slate-800/20 border-slate-800/50 hover:border-slate-700 hover:bg-slate-800/40'}`}
                             >
                                 <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-slate-700 flex-shrink-0">
@@ -476,8 +496,16 @@ const MusicModal: React.FC<MusicModalProps> = ({ isOpen, onClose }) => {
                             </div>
                             <button 
                                 onClick={() => {
-                                    if (isPlaying) audioRef.current?.pause();
-                                    else audioRef.current?.play();
+                                    if (isPlaying) {
+                                        audioRef.current?.pause();
+                                    } else {
+                                        const playPromise = audioRef.current?.play();
+                                        if (playPromise !== undefined) {
+                                            playPromise.catch(e => {
+                                                if (e.name !== 'AbortError') console.warn('Bottom play interrupted:', e);
+                                            });
+                                        }
+                                    }
                                     setIsPlaying(!isPlaying);
                                 }}
                                 className={`w-12 h-12 flex-shrink-0 flex items-center justify-center rounded-full bg-gradient-to-tr from-[var(--theme-color)] to-purple-500 text-white shadow-lg shadow-[var(--theme-color)]/20 active:scale-95 transition-transform`}

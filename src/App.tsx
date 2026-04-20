@@ -153,7 +153,7 @@ const MainContent: React.FC = () => {
     };
 
     return (
-        <div className="w-full max-w-7xl mx-auto pb-24">
+        <div className="w-full max-w-7xl mx-auto pb-safe pb-28 sm:pb-32">
             <Header />
 
             {isSearchMode && !isGenerated && (
@@ -247,7 +247,7 @@ const App: React.FC = () => {
     }, [settings.themeColor]);
 
     return (
-        <div className="relative z-10 min-h-screen text-slate-100 font-pixel flex flex-col items-center p-4 sm:p-6 lg:p-8">
+        <div className="relative z-10 min-h-[100dvh] text-slate-100 font-pixel flex flex-col items-center p-4 sm:p-6 lg:p-8">
             {settings.sakuraEffectEnabled && <SakuraEffect />}
             <ClickParticles />
             {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage('')} />}
@@ -256,9 +256,9 @@ const App: React.FC = () => {
             {isCustomBgPanelRendered && <CustomBgPanel />}
             {isQBindModalRendered && <QBindModal />}
             {isVideoParserModalRendered && <VideoParserModal isOpen={isVideoParserModalOpen} onClose={() => setIsVideoParserModalOpen(false)} />}
-            {isMusicModalRendered && <MusicModal isOpen={isMusicModalOpen} onClose={() => setIsMusicModalOpen(false)} />}
 
-            <Suspense fallback={null}>
+            <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm"><Loader /></div>}>
+                {isMusicModalRendered && <MusicModal isOpen={isMusicModalOpen} onClose={() => setIsMusicModalOpen(false)} />}
 
                 <input type="file" ref={fileInputRef} onChange={(e) => { handleFileChange(e); setIsCustomBgPanelOpen(false); }} accept="image/*" className="hidden" />
 

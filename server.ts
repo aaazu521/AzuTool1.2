@@ -12,14 +12,12 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-async function startServer() {
-  const PORT = process.env.PORT || 3000;
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+const PORT = process.env.PORT || 3000;
 
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
-
-  // Xiaohongshu Parser API
-  app.get("/api/parse/xhs", async (req, res) => {
+// Xiaohongshu Parser API
+app.get("/api/parse/xhs", async (req, res) => {
     const url = req.query.url as string;
     if (!url) {
       return res.status(400).json({ error: "URL is required" });
@@ -448,6 +446,11 @@ async function startServer() {
     
     if (!url) return res.status(400).json({ error: "URL is required" });
 
+    // Reject non-HTTP(S) protocols (like javascript:, ws:, etc.)
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        return res.status(400).json({ error: `Unsupported protocol in URL: ${url}` });
+    }
+
     // Better filtering: drop problematic domains before fetch
     if (url.includes('api.huibq.com') || url.includes('api.lingchuan.com') || url.includes('invalid-url.com') || url.includes('blocked.api')) {
       return res.status(200).json({
@@ -529,6 +532,11 @@ async function startServer() {
       return res.status(400).json({ error: "URL parameter is required" });
     }
 
+    // Reject non-HTTP(S) protocols
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+        return res.status(400).json({ error: "Unsupported protocol" });
+    }
+
     // Prevent infinite proxy loops
     if (targetUrl.includes(req.hostname) && targetUrl.includes('/api/proxy')) {
       return res.status(400).json({ error: "Infinite proxy loop detected" });
@@ -560,11 +568,23 @@ async function startServer() {
           referer = 'http://www.kugou.com/';
       } else if (targetUrl.includes('migu.cn')) {
           referer = 'https://m.music.migu.cn/';
+      } else if (targetUrl.includes('jitsu.top')) {
+          referer = 'https://moe.jitsu.top/';
       }
       
       const headers: any = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,video/*,*/*;q=0.8',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': '"Windows"',
+          'Sec-Fetch-Dest': targetUrl.includes('video') ? 'video' : 'image',
+          'Sec-Fetch-Mode': 'no-cors',
+          'Sec-Fetch-Site': 'cross-site',
           'Connection': 'keep-alive'
       };
 
@@ -592,16 +612,20 @@ async function startServer() {
       }
 
       // Increase timeout for slow image proxies
-      const timeoutMs = (downloadName ? 60000 : (targetUrl.includes('jitsu.top') ? 40000 : 20000));
+      const timeoutMs = (downloadName ? 60000 : (targetUrl.includes('jitsu.top') ? 60000 : 20000));
       
       const response = await axios.get(targetUrl, {
         responseType: 'stream',
         timeout: timeoutMs, 
         headers: headers,
         maxRedirects: 15,
-        validateStatus: (status) => status < 500,
-        decompress: true // Handle compressed streams
+        validateStatus: () => true, 
+        decompress: true 
       });
+
+      if (response.status >= 500) {
+          console.warn(`[Proxy] Target ${targetUrl} returned ${response.status}`);
+      }
 
       // Log if we got a redirect status but axios already handled it
       if (response.status >= 300 && response.status < 400) {
@@ -664,7 +688,8 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
+// Vite middleware for development
+async function startViteOrStatic() {
   if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
@@ -687,5 +712,6 @@ async function startServer() {
   }
 }
 
-startServer();
+startViteOrStatic();
+
 export default app;

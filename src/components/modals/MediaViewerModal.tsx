@@ -73,10 +73,17 @@ const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ item, onClose, medi
             src={item.url}
             title={item.title || 'viewed video'}
             controls
-            autoPlay
             loop
             playsInline
             className="max-w-full max-h-full object-contain rounded-lg shadow-2xl bg-black"
+            ref={(el) => {
+              if (el) {
+                const playPromise = el.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(e => console.warn('Modal video play interrupted:', e));
+                }
+              }
+            }}
           >
             Your browser does not support the video tag.
           </video>

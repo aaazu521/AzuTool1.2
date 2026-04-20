@@ -65,9 +65,14 @@ const ImageCard: React.FC<ImageCardProps> = ({ item, aspectRatio, className, sty
             aria-label={`查看图片: ${item.alt}`}
         >
             <div 
-                className="overflow-hidden relative bg-slate-800/50 flex justify-center items-center transition-[aspect-ratio] duration-500 ease-in-out min-h-[300px]"
-                style={{ aspectRatio: aspectRatio === 'auto' ? undefined : aspectRatio }}
+                className="overflow-hidden relative bg-slate-900 flex justify-center items-center transition-all duration-500 ease-in-out min-h-[200px] media-container"
+                style={{ aspectRatio: (aspectRatio === 'auto' || !aspectRatio) ? '3 / 4' : aspectRatio }}
             >
+                {isLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-800/50 skeleton-pulse">
+                         <div className="w-10 h-10 border-4 border-[var(--theme-color)]/20 border-t-[var(--theme-color)] rounded-full animate-spin"></div>
+                    </div>
+                )}
                 <img 
                     src={item.url} 
                     alt={item.alt}
@@ -133,7 +138,7 @@ const ImageResultsGrid: React.FC<ImageResultsGridProps> = memo(({ results }) => 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {results.map((result, index) => (
           <ImageCard 
-            key={result.item.url || index} 
+            key={`${result.item.url || index}-${index}`} 
             item={result.item}
             aspectRatio={result.aspectRatio}
             className="animate-fade-in"

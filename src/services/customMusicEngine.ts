@@ -210,6 +210,12 @@ export class CustomMusicEngine {
 
         const execute = async () => {
             try {
+                // If script sends invalid protocols blindly block them
+                if (url && url.startsWith('javascript:')) {
+                    if (finalCallback) finalCallback(new Error("Unsupported protocol skipped"), null, null);
+                    return;
+                }
+
                 // Ensure body is handled correctly if it's a Buffer
                 let dataToBridge = body || form || formData;
                 if (Buffer.isBuffer(dataToBridge)) {

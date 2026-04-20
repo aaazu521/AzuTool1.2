@@ -201,12 +201,12 @@ const VideoParserModal: React.FC<VideoParserModalProps> = ({ isOpen, onClose }) 
                         <div className="space-y-6 animate-fade-in">
                             {/* Info */}
                             <div className="flex gap-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                                <img src={`/api/proxy?url=${encodeURIComponent(result.cover)}`} alt="Cover" className="w-24 h-32 object-cover rounded-lg shadow-lg" />
+                                <img src={`/api/proxy?url=${encodeURIComponent(result.cover)}`} referrerPolicy="no-referrer" alt="Cover" className="w-24 h-32 object-cover rounded-lg shadow-lg" />
                                 <div className="flex-1 space-y-2">
                                     <h3 className="font-bold text-white line-clamp-1">{result.title || "无标题"}</h3>
                                     <p className="text-sm text-slate-400 line-clamp-2">{result.desc}</p>
                                     <div className="flex items-center gap-2 pt-2">
-                                        <img src={result.author.avatar} alt="Avatar" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
+                                        <img src={`/api/proxy?url=${encodeURIComponent(result.author.avatar)}`} alt="Avatar" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
                                         <span className="text-xs text-slate-300">{result.author.name}</span>
                                     </div>
                                 </div>
@@ -233,7 +233,8 @@ const VideoParserModal: React.FC<VideoParserModalProps> = ({ isOpen, onClose }) 
                                             src={`/api/proxy?url=${encodeURIComponent(result.url)}`} 
                                             controls 
                                             className="w-full rounded-xl border border-slate-700 shadow-xl"
-                                            poster={result.cover}
+                                            poster={`/api/proxy?url=${encodeURIComponent(result.cover)}`}
+                                            referrerPolicy="no-referrer"
                                         />
                                     </div>
                                 )}
@@ -274,6 +275,7 @@ const VideoParserModal: React.FC<VideoParserModalProps> = ({ isOpen, onClose }) 
                                                         src={`/api/proxy?url=${encodeURIComponent(img)}`} 
                                                         alt={`Image ${idx}`} 
                                                         className="w-full h-full object-cover" 
+                                                        referrerPolicy="no-referrer"
                                                     />
                                                     
                                                     {/* Checkbox */}
@@ -317,6 +319,7 @@ const VideoParserModal: React.FC<VideoParserModalProps> = ({ isOpen, onClose }) 
                                                         controls 
                                                         className="w-full rounded-lg border border-slate-700"
                                                         poster={`/api/proxy?url=${encodeURIComponent(live.image)}`}
+                                                        referrerPolicy="no-referrer"
                                                     />
                                                     <button 
                                                         onClick={() => handleDownload(live.video, `xhs-live-${idx}-${Date.now()}.mp4`)}

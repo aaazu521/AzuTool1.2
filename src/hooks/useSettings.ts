@@ -27,7 +27,10 @@ const defaultSettings: AppSettings = {
   breakSafetyLimits: false,
   sakuraEffectEnabled: true,
   videoApiEndpoints: [{ id: defaultVideoApiId, name: '阿族接口', url: 'http://api.yujn.cn/api/rewu.php?type=video' }],
-  imageApiEndpoints: [{ id: defaultImageApiId, name: '阿族的二次元图片', url: 'https://moe.jitsu.top/img/' }],
+  imageApiEndpoints: [
+    { id: defaultImageApiId, name: '阿族的二次元图片', url: 'https://moe.jitsu.top/img/' },
+    { id: 'backup-image-1', name: '随机二次元(备用)', url: 'https://api.oick.cn/api/anime' }
+  ],
   selectedVideoApiId: defaultVideoApiId,
   selectedImageApiId: defaultImageApiId,
   customMusicSources: [],

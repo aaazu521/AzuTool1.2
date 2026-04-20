@@ -125,10 +125,10 @@ export const QBindModal: React.FC = () => {
                         <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 space-y-3 animate-fade-in">
                             <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider font-sans">查询结果</h4>
                             <div className="grid grid-cols-1 gap-2">
-                                {Object.entries(result).map(([key, value]) => {
+                                {Object.entries(result).map(([key, value], index) => {
                                     const displayKey = key === 'p' ? '手机号' : key;
                                     return (
-                                        <div key={key} className="flex justify-between items-center p-2 rounded-lg bg-slate-900/50">
+                                        <div key={`${key}-${index}`} className="flex justify-between items-center p-2 rounded-lg bg-slate-900/50">
                                             <span className="text-slate-500 text-sm font-sans">{displayKey}</span>
                                             <span className="text-white font-medium font-sans">{String(value)}</span>
                                         </div>

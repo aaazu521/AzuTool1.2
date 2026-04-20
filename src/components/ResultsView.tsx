@@ -226,7 +226,7 @@ const ResultsView: React.FC = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
                                     {websites.map((site, index) => (
                                         <WebsiteCard
-                                            key={site.url}
+                                            key={`${site.url}-${index}`}
                                             site={site}
                                             className="card-entry"
                                             style={{ animationDelay: `${index * 50}ms` }}
@@ -288,7 +288,7 @@ const ResultsView: React.FC = () => {
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
                         {favorites.map((site, index) => (
-                            <WebsiteCard key={`fav-${site.url}`} site={site} isFavorite={true} className="card-entry" style={{ animationDelay: `${index * 50}ms` }} />
+                            <WebsiteCard key={`fav-${site.url}-${index}`} site={site} isFavorite={true} className="card-entry" style={{ animationDelay: `${index * 50}ms` }} />
                         ))}
                     </div>
                 </div>
@@ -303,10 +303,10 @@ const ResultsView: React.FC = () => {
                     {isHistoryVisible && (
                         <div className="mt-4 bg-slate-800/30 backdrop-blur-md border border-slate-700/50 p-4 rounded-lg max-h-96 overflow-y-auto">
                             <ul className="space-y-2">
-                                {allGeneratedWebsites.map(site => {
+                                {allGeneratedWebsites.map((site, index) => {
                                     const isVisited = visitedUrls.has(site.url);
                                     return (
-                                        <li key={`hist-${site.url}`} className="flex justify-between items-center text-slate-400 hover:bg-slate-700/50 p-2 rounded-md transition-colors duration-200">
+                                        <li key={`hist-${site.url}-${index}`} className="flex justify-between items-center text-slate-400 hover:bg-slate-700/50 p-2 rounded-md transition-colors duration-200">
                                             <span className={`font-medium ${isVisited ? 'text-slate-500' : 'text-slate-300'}`}>{site.name}</span>
                                             <a href={site.url} target="_blank" rel="noopener noreferrer" onClick={() => handleMarkAsVisited(site.url)} className={`text-sm truncate ml-4 ${isVisited ? 'text-slate-600' : 'text-[var(--theme-color)] hover:underline'}`} >
                                                 {site.url}

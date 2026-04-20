@@ -7,7 +7,8 @@ const WEBSITES_KEY = 'pump_app_websites';
 const ALL_WEBSITES_KEY = 'pump_app_all_websites';
 const IS_GENERATED_KEY = 'pump_app_is_generated';
 
-const MAX_BUFFER_SIZE = 3;
+const MAX_BUFFER_SIZE = 8; // Further increased for dedicated server use
+const CONCURRENT_PRELOADS = 3; // Allow more concurrent fetches for faster buffer filling
 
 // Helper to check if a URL needs proxying
 const shouldProxy = (url: string): boolean => {
@@ -15,17 +16,20 @@ const shouldProxy = (url: string): boolean => {
     return url.startsWith('http://') || (url.startsWith('https://') && !url.includes(window.location.host));
 };
 
-// Helper to get proxied URL
-const getProxiedUrl = (url: string, isPreload: boolean = false): string => {
+// Helper to get proxied URL for API endpoints to bypass CORS via our backend
+const getProxiedUrl = (url: string, bypassProxyIfDirect: boolean = false): string => {
     if (!shouldProxy(url)) return url;
-    // Remove timestamp as it can break some APIs and prevents caching benefits
-    return `/api/proxy?url=${encodeURIComponent(url)}${isPreload ? '&preload=true' : ''}`;
+    // Fast path: if the user explicitly wants to bypass proxy (e.g. for already resolved direct links in ui) we can.
+    // However, the proxy guarantees CORS safety for blob fetching.
+    return `/api/proxy?url=${encodeURIComponent(url)}`;
 };
 
 // Helper to add a timestamp to a URL to prevent caching and ensure fresh results
 const appendTimestamp = (url: string): string => {
     const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}t=${Date.now()}`;
+    // Add both timestamp and a random string to guarantee uniqueness in parallel calls
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    return `${url}${separator}t=${Date.now()}_${randomStr}`;
 };
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -62,35 +66,36 @@ const blobToDataURL = (blob: Blob): Promise<string> => {
 };
 
 /**
- * Recursively searches for the first value that looks like a URL within a JSON object.
+ * Recursively searches for all values that look like a URL within a JSON object.
  */
-function findUrlInJson(data: any): string | null {
-    if (typeof data === 'string' && (data.startsWith('http://') || data.startsWith('https://') || data.startsWith('data:image'))) {
-        return data;
-    }
-    if (Array.isArray(data)) {
-        for (const item of data) {
-            const url = findUrlInJson(item);
-            if (url) return url;
+function findUrlsInJson(data: any): string[] {
+    const urls: string[] = [];
+    function traverse(obj: any) {
+        if (typeof obj === 'string' && (obj.startsWith('http://') || obj.startsWith('https://') || obj.startsWith('data:image'))) {
+            urls.push(obj);
+            return;
         }
-    } else if (typeof data === 'object' && data !== null) {
-        // Prioritize common keys
-        const preferredKeys = ['url', 'image', 'img', 'src', '图片'];
-        for (const key of preferredKeys) {
-            if (Object.prototype.hasOwnProperty.call(data, key)) {
-                 const url = findUrlInJson(data[key]);
-                 if (url) return url;
+        if (Array.isArray(obj)) {
+            for (const item of obj) {
+                traverse(item);
+            }
+        } else if (typeof obj === 'object' && obj !== null) {
+            // First check common keys, then others
+            const preferredKeys = ['url', 'image', 'img', 'src', '图片', 'video'];
+            for (const key of preferredKeys) {
+                if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                     traverse(obj[key]);
+                }
+            }
+            for (const key in obj) {
+                if (Object.prototype.hasOwnProperty.call(obj, key) && !preferredKeys.includes(key)) {
+                    traverse(obj[key]);
+                }
             }
         }
-        // Search remaining keys
-        for (const key in data) {
-            if (Object.prototype.hasOwnProperty.call(data, key) && !preferredKeys.includes(key)) {
-                const url = findUrlInJson(data[key]);
-                if (url) return url;
-            }
-        }
     }
-    return null;
+    traverse(data);
+    return urls;
 }
 
 /**
@@ -119,7 +124,7 @@ const getMediaDimensions = (url: string, type: 'image' | 'video', signal?: Abort
             }
             signal?.removeEventListener('abort', onAbort);
             reject(new Error(`Media loading timed out: ${url}`));
-        }, 15000); // 15 seconds timeout
+        }, signal?.aborted ? 1 : (signal ? 3000 : 15000)); // Shorter timeout for background/manual detection to prevent hanging UI
 
         let img: HTMLImageElement;
         let video: HTMLVideoElement;
@@ -169,9 +174,9 @@ async function fetchAndProcessMedia<T extends VideoGenerationResultItem | ImageG
     retries = 2,
     isPreload: boolean = false
 ): Promise<BufferedMedia<T>[]> {
-    // Use proxy for external URLs to avoid CORS and Mixed Content (HTTP on HTTPS) issues
-    let finalUrl = getProxiedUrl(endpoint, isPreload);
-    // Append timestamp to the final URL to bust browser cache (especially since proxy sets Cache-Control)
+    // Use proxy for external API URLs to avoid CORS when fetching JSON
+    let finalUrl = getProxiedUrl(endpoint);
+    // Append timestamp to the final URL to bust browser cache
     finalUrl = appendTimestamp(finalUrl);
 
     for (let i = 0; i <= retries; i++) {
@@ -214,20 +219,22 @@ async function fetchAndProcessMedia<T extends VideoGenerationResultItem | ImageG
                 try {
                     const data = await response.json();
                     if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object' && data[0] !== null && 'url' in data[0]) {
-                        rawItems = data.map(item => ({ ...item, url: getProxiedUrl(item.url, isPreload) }));
+                        rawItems = data.map(item => ({ ...item, url: getProxiedUrl(item.url) }));
                     } else if (type === 'image' && data?.['数据']?.['图片']) {
-                        rawItems = [{ url: getProxiedUrl(data['数据']['图片'], isPreload), alt: '生成的图片' }] as unknown as Partial<T>[];
+                        rawItems = [{ url: getProxiedUrl(data['数据']['图片']), alt: '生成的图片' }] as unknown as Partial<T>[];
                     } else {
-                        const foundUrl = findUrlInJson(data);
-                        if (foundUrl) {
-                            const proxiedUrl = getProxiedUrl(foundUrl, isPreload);
-                            rawItems = type === 'image' 
-                                ? [{ url: proxiedUrl, alt: '生成的图片' }] as unknown as Partial<T>[]
-                                : [{ url: proxiedUrl, title: '生成的视频', thumbnail: '' }] as unknown as Partial<T>[];
+                        const foundUrls = findUrlsInJson(data);
+                        if (foundUrls.length > 0) {
+                            rawItems = foundUrls.map(foundUrl => {
+                                const proxiedUrl = getProxiedUrl(foundUrl);
+                                return type === 'image' 
+                                    ? { url: proxiedUrl, alt: '生成的图片' } as unknown as Partial<T>
+                                    : { url: proxiedUrl, title: '生成的视频', thumbnail: '' } as unknown as Partial<T>;
+                            });
                         }
                     }
 
-                    // If preloading, fetch blobs for the found URLs
+                    // For best performance and dimensions logic: Pre-fetch blobs if preloading
                     if (isPreload && rawItems.length > 0) {
                         for (const item of rawItems) {
                             if (item.url && !item.url.startsWith('blob:') && !item.url.startsWith('data:')) {
@@ -248,12 +255,12 @@ async function fetchAndProcessMedia<T extends VideoGenerationResultItem | ImageG
                             const text = await responseClone.text();
                             const trimmedText = text.trim();
                             if (trimmedText.startsWith('http')) {
-                                const proxiedUrl = getProxiedUrl(trimmedText, isPreload);
+                                const proxiedUrl = getProxiedUrl(trimmedText);
                                 rawItems = type === 'image' 
                                     ? [{ url: proxiedUrl, alt: '生成的图片' }] as unknown as Partial<T>[]
                                     : [{ url: proxiedUrl, title: '生成的视频', thumbnail: '' }] as unknown as Partial<T>[];
                                 
-                                // Preload blob for text URL if needed
+                                // Fetch blob for text URL if needed
                                 if (isPreload && rawItems[0].url) {
                                     try {
                                         const res = await fetch(rawItems[0].url, { signal });
@@ -280,11 +287,10 @@ async function fetchAndProcessMedia<T extends VideoGenerationResultItem | ImageG
             for (const item of rawItems) {
                 if (item.url) {
                     try {
-                        // OPTIMIZATION: Skip dimension detection for manual requests to get them on screen faster
+                        // For manual requests (isPreload=false), we skip dimension detection to show media INSTANTLY
+                        // For preloading, we detect dimensions to prevent layout shifts later
                         if (!isPreload) {
-                            // Use a slightly more flexible default for images
-                            const defaultRatio = type === 'video' ? '9 / 16' : 'auto';
-                            processedItems.push({ item: item as T, aspectRatio: defaultRatio });
+                            processedItems.push({ item: item as T, aspectRatio: type === 'video' ? '9 / 16' : 'auto' });
                             continue;
                         }
 
@@ -295,8 +301,9 @@ async function fetchAndProcessMedia<T extends VideoGenerationResultItem | ImageG
                         if ((dimError as Error).message === 'Media dimension detection aborted') {
                             throw dimError;
                         }
-                        console.warn(`Dimension detection failed for ${item.url}, using fallback:`, dimError);
-                        const defaultRatio = type === 'video' ? '9 / 16' : '1 / 1';
+                        console.warn(`Dimension detection failed for ${item.url}, using fallbacks:`, dimError);
+                        // Sensible fallbacks based on common social media formats
+                        const defaultRatio = type === 'video' ? '9 / 16' : 'auto';
                         processedItems.push({ item: item as T, aspectRatio: defaultRatio });
                     }
                 }
@@ -314,7 +321,8 @@ async function fetchAndProcessMedia<T extends VideoGenerationResultItem | ImageG
             }
             console.warn(`Attempt ${i + 1} failed for ${endpoint}. Error:`, error);
             if (i < retries) {
-                await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+                const backoff = 1000 * Math.pow(2, i);
+                await new Promise(resolve => setTimeout(resolve, backoff));
             } else {
                 throw error; // Rethrow after all retries failed
             }
@@ -322,7 +330,6 @@ async function fetchAndProcessMedia<T extends VideoGenerationResultItem | ImageG
     }
     throw new Error('All fetch attempts failed.');
 }
-
 
 export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term: string) => void) => {
   const [websites, setWebsites] = useLocalStorage<Website[]>(WEBSITES_KEY, []);
@@ -350,10 +357,17 @@ export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term:
   const lastGenerateTimeRef = useRef(0);
   const isPreloadingWebsitesRef = useRef(false);
   
-  const [resultType, setResultType] = useState<'websites' | 'grounded' | 'video' | 'image' | null>(() => (websites.length > 0) ? 'websites' : null);
-  
-  const [internalQuery, setInternalQuery] = useState('');
   const [generationTarget, setGenerationTarget] = useState<'video' | 'image' | null>(null);
+  const [internalQuery, setInternalQuery] = useState('');
+
+  const resultType = useMemo(() => {
+    if (isLoading && generationTarget) return generationTarget;
+    if (groundedResult) return 'grounded';
+    if (videoResult && videoResult.length > 0) return 'video';
+    if (imageResult && imageResult.length > 0) return 'image';
+    if (websites && websites.length > 0) return 'websites';
+    return null;
+  }, [websites, groundedResult, videoResult, imageResult, isLoading, generationTarget]);
 
   const [previousResultState, setPreviousResultState] = useState<PreviousState | null>(null);
 
@@ -409,8 +423,10 @@ export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term:
     
     isPreloadingMediaRef.current = true;
 
+    // Use a pool to limit concurrency while preloading many items
     const preloadTasks: Promise<void>[] = [];
-
+    const activeTasksCountRef = { current: 0 };
+    
     const resolveApiEndpoint = (endpoints: {id: string, name: string, url: string}[], selectedId: string | null) => {
         if (selectedId === 'random' && endpoints.length > 0) {
             const randomIndex = Math.floor(Math.random() * endpoints.length);
@@ -419,42 +435,46 @@ export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term:
         return endpoints.find(api => api.id === selectedId);
     };
 
-    // Preload Videos
-    if (settings.videoGenerationEnabled && settings.videoApiEndpoints.length > 0 && videoNeeded > 0) {
-        const videoTasks = Array.from({ length: videoNeeded }).map(async (item, index) => {
-          try {
-            if (signal.aborted) return;
-            const api = resolveApiEndpoint(settings.videoApiEndpoints, settings.selectedVideoApiId);
+    const runTask = async (type: 'video' | 'image', index: number, total: number) => {
+        if (signal.aborted) return;
+        try {
+            const endpoints = type === 'video' ? settings.videoApiEndpoints : settings.imageApiEndpoints;
+            const selectedId = type === 'video' ? settings.selectedVideoApiId : settings.selectedImageApiId;
+            const api = resolveApiEndpoint(endpoints, selectedId);
+            
             if (!api?.url) return;
-            console.log(`Preloading video ${index + 1}/${videoNeeded} from ${api.name}...`);
-            const data = await fetchAndProcessMedia<VideoGenerationResultItem>(api.url, 'video', signal, 1, true);
-            if (data && data.length > 0) {
-                setVideoResultBuffer(prev => [...prev, data].slice(0, MAX_BUFFER_SIZE));
+            console.log(`Preloading ${type} ${index + 1}/${total} from ${api.name}...`);
+            const data = await fetchAndProcessMedia(api.url, type, signal, 1, true);
+            if (data && data.length > 0 && !signal.aborted) {
+                if (type === 'video') setVideoResultBuffer(prev => [...prev, data].slice(0, MAX_BUFFER_SIZE));
+                else setImageResultBuffer(prev => [...prev, data].slice(0, MAX_BUFFER_SIZE));
             }
-          } catch (e) {
-            if ((e as Error).name !== 'AbortError') console.error('Video preloading failed:', e);
-          }
-        });
-        preloadTasks.push(...videoTasks);
-    }
+        } catch (e) {
+            if ((e as Error).name !== 'AbortError') {
+                const endpoints = type === 'video' ? settings.videoApiEndpoints : settings.imageApiEndpoints;
+                const selectedId = type === 'video' ? settings.selectedVideoApiId : settings.selectedImageApiId;
+                const api = endpoints.find(a => a.id === selectedId);
+                console.error(`${type} preloading failed (${api?.name || '未知接口'}):`, e);
+            }
+        }
+    };
 
-    // Preload Images
-    if (settings.imageGenerationEnabled && settings.imageApiEndpoints.length > 0 && imageNeeded > 0) {
-        const imageTasks = Array.from({ length: imageNeeded }).map(async (item, index) => {
-          try {
-             if (signal.aborted) return;
-             const api = resolveApiEndpoint(settings.imageApiEndpoints, settings.selectedImageApiId);
-             if (!api?.url) return;
-             console.log(`Preloading image ${index + 1}/${imageNeeded} from ${api.name}...`);
-             const data = await fetchAndProcessMedia<ImageGenerationResultItem>(api.url, 'image', signal, 1, true);
-             if (data && data.length > 0) {
-                 setImageResultBuffer(prev => [...prev, data].slice(0, MAX_BUFFER_SIZE));
-             }
-          } catch (e) {
-            if ((e as Error).name !== 'AbortError') console.error('Image preloading failed:', e);
-          }
-        });
-        preloadTasks.push(...imageTasks);
+    // Queue up tasks with a limit on concurrent requests
+    const queue = [
+        ...Array.from({ length: videoNeeded }).map((_, i) => () => runTask('video', i, videoNeeded)),
+        ...Array.from({ length: imageNeeded }).map((_, i) => () => runTask('image', i, imageNeeded))
+    ];
+
+    const worker = async () => {
+        while (queue.length > 0 && !signal.aborted) {
+            const task = queue.shift();
+            if (task) await task();
+        }
+    };
+
+    // Launch workers up to CONCURRENT_PRELOADS
+    for (let i = 0; i < CONCURRENT_PRELOADS; i++) {
+        preloadTasks.push(worker());
     }
 
     try {
@@ -556,23 +576,29 @@ export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term:
         genType = 'websites';
     }
 
-    // --- Buffer Logic ---
     // Serve from website buffer first for instant "换一批"
     if (genType === 'websites' && websiteResultBuffer.length > 0) {
         setIsLoading(true);
-        await sleep(200); // Small intentional delay for UX stability
         const [nextResult, ...remainingBuffer] = websiteResultBuffer;
-        setWebsites(nextResult);
+        
+        // Deduplicate nextResult
+        const dedupedNext = nextResult.filter((site, index, self) => 
+            index === self.findIndex((t) => t.url === site.url)
+        );
+        
+        setWebsites(dedupedNext);
         setWebsiteResultBuffer(remainingBuffer);
         
+        // Clear other results to ensure switch
+        setGroundedResult(null); setVideoResult(null); setImageResult(null);
+        
         const allWebsitesMap = new Map(allGeneratedWebsites.map(site => [site.url, site]));
-        nextResult.forEach(site => allWebsitesMap.set(site.url, site));
+        dedupedNext.forEach(site => allWebsitesMap.set(site.url, site));
         const newAllWebsites = Array.from(allWebsitesMap.values());
         setAllGeneratedWebsites(newAllWebsites);
 
-        setResultType('websites');
         setIsGenerated(true);
-        setIsLoading(false); // CRITICAL: Reset loading state
+        setIsLoading(false);
 
         // Trigger preload for the *next* batch
         preloadWebsites(query, newAllWebsites);
@@ -581,33 +607,37 @@ export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term:
 
     // Serve from media buffers
     if (genType === 'video' && videoResultBuffer.length > 0) {
-        console.log(`Serving video from buffer. Buffer size: ${videoResultBuffer.length}`);
         setIsLoading(true);
-        await sleep(150); // Minimal delay for UX feel
         const [nextResult, ...remainingBuffer] = videoResultBuffer;
         setVideoResult(nextResult);
         setVideoResultBuffer(remainingBuffer);
-        setResultType('video');
+        
+        // Clear other results to ensure switch
+        setWebsites([]); setGroundedResult(null); setImageResult(null);
+        
         setIsGenerated(true);
         setIsLoading(false);
+        
+        // Faster refill
+        setTimeout(() => preloadMedia(), 50);
         return;
-    } else if (genType === 'video') {
-        console.log("Video buffer empty, performing fresh fetch...");
     }
 
     if (genType === 'image' && imageResultBuffer.length > 0) {
-        console.log(`Serving image from buffer. Buffer size: ${imageResultBuffer.length}`);
         setIsLoading(true);
-        await sleep(150); // Minimal delay for UX feel
         const [nextResult, ...remainingBuffer] = imageResultBuffer;
         setImageResult(nextResult);
         setImageResultBuffer(remainingBuffer);
-        setResultType('image');
+        
+        // Clear other results to ensure switch
+        setWebsites([]); setGroundedResult(null); setVideoResult(null);
+        
         setIsGenerated(true);
         setIsLoading(false);
+
+        // Faster refill
+        setTimeout(() => preloadMedia(), 50);
         return;
-    } else if (genType === 'image') {
-        console.log("Image buffer empty, performing fresh fetch...");
     }
 
     // 3. Cancel any previous main request if it's still running
@@ -630,9 +660,12 @@ export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term:
         };
         const selectedApi = resolveApiEndpoint(settings.videoApiEndpoints, settings.selectedVideoApiId);
         if (!selectedApi?.url) throw new Error("请在设置中选择一个有效的视频生成 API。");
-        const data = await fetchAndProcessMedia<VideoGenerationResultItem>(selectedApi.url, 'video', mainSignal);
+        const rawData = await fetchAndProcessMedia<VideoGenerationResultItem>(selectedApi.url, 'video', mainSignal);
+        // Deduplicate
+        const data = rawData.filter((item, index, self) => 
+            index === self.findIndex((t) => t.item.url === item.item.url)
+        );
         setVideoResult(data);
-        setResultType('video');
         setWebsites([]); setGroundedResult(null); setImageResult(null);
       } else if (genType === 'image') {
         const resolveApiEndpoint = (endpoints: {id: string, name: string, url: string}[], selectedId: string | null) => {
@@ -644,22 +677,33 @@ export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term:
         };
         const selectedApi = resolveApiEndpoint(settings.imageApiEndpoints, settings.selectedImageApiId);
         if (!selectedApi?.url) throw new Error("请在设置中选择一个有效的图片生成 API。");
-        const data = await fetchAndProcessMedia<ImageGenerationResultItem>(selectedApi.url, 'image', mainSignal);
+        const rawData = await fetchAndProcessMedia<ImageGenerationResultItem>(selectedApi.url, 'image', mainSignal);
+        // Deduplicate
+        const data = rawData.filter((item, index, self) => 
+            index === self.findIndex((t) => t.item.url === item.item.url)
+        );
         setImageResult(data);
-        setResultType('image');
         setWebsites([]); setGroundedResult(null); setVideoResult(null);
       } else if (genType === 'grounded') {
         const result = await fetchWithGoogleSearch(query, settings);
         setGroundedResult(result);
-        setResultType('grounded');
         setWebsites([]); setVideoResult(null); setImageResult(null);
       } else { // websites
         const count = settings.unlimitedSearchEnabled ? settings.unlimitedSearchCount : 8;
-        const result = await fetchWebsitesWithGemini(allGeneratedWebsites, query, count, settings);
+        const rawResult = await fetchWebsitesWithGemini(allGeneratedWebsites, query, count, settings);
+        // Deduplicate
+        const result = rawResult.filter((site, index, self) => 
+            index === self.findIndex((t) => t.url === site.url)
+        );
         setWebsites(result);
-        setResultType('websites');
-        const allWebsitesMap = new Map(allGeneratedWebsites.map(site => [site.url, site]));
+        
+        // Use a Map to strictly identify unique URLs
+        const allWebsitesMap = new Map();
+        // Add existing ones
+        allGeneratedWebsites.forEach(site => allWebsitesMap.set(site.url, site));
+        // Add or overwrite with new ones
         result.forEach(site => allWebsitesMap.set(site.url, site));
+        
         const newAllWebsites = Array.from(allWebsitesMap.values());
         setAllGeneratedWebsites(newAllWebsites);
         setGroundedResult(null); setVideoResult(null); setImageResult(null);
@@ -690,7 +734,6 @@ export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term:
           setGroundedResult(previousResultState.groundedResult);
           setVideoResult(previousResultState.videoResult);
           setImageResult(previousResultState.imageResult);
-          setResultType(previousResultState.resultType);
           setWebsiteResultBuffer(previousResultState.websiteResultBuffer);
           setVideoResultBuffer(previousResultState.videoResultBuffer);
           setImageResultBuffer(previousResultState.imageResultBuffer);
@@ -714,7 +757,6 @@ export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term:
         setGroundedResult(previousResultState.groundedResult);
         setVideoResult(previousResultState.videoResult);
         setImageResult(previousResultState.imageResult);
-        setResultType(previousResultState.resultType);
         setWebsiteResultBuffer(previousResultState.websiteResultBuffer);
         setVideoResultBuffer(previousResultState.videoResultBuffer);
         setImageResultBuffer(previousResultState.imageResultBuffer);
@@ -727,13 +769,12 @@ export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term:
     setGroundedResult(null);
     setVideoResult(null);
     setImageResult(null);
-    setResultType(null);
     setIsGenerated(false);
     setPreviousResultState(null);
     setError(null);
     setInternalQuery('');
     setWebsiteResultBuffer([]);
-  }, [setWebsites, setIsGenerated, setGroundedResult, setVideoResult, setImageResult, setResultType, setPreviousResultState, setError, setWebsiteResultBuffer]);
+  }, [setWebsites, setIsGenerated, setGroundedResult, setVideoResult, setImageResult, setPreviousResultState, setError, setWebsiteResultBuffer]);
 
   const resetGenerator = useCallback(() => {
     setWebsites([]);
@@ -742,7 +783,6 @@ export const useWebsiteGenerator = (settings: AppSettings, addSearchTerm: (term:
     setGroundedResult(null);
     setVideoResult(null);
     setImageResult(null);
-    setResultType(null);
     setPreviousResultState(null);
     setError(null);
     setInternalQuery('');

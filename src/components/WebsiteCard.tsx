@@ -37,27 +37,6 @@ export const WebsiteCard: React.FC<WebsiteCardProps> = memo(({ site, isFavorite:
   const isThemeLight = isColorLight(settings.themeColor);
   const hoverTextColorClass = isThemeLight ? 'hover:text-slate-900' : 'hover:text-white';
 
-  const AnalysisButton = () => {
-    const baseClasses = `inline-flex items-center text-sm font-semibold text-white bg-slate-700/80 px-4 py-2 rounded-full hover:bg-[var(--theme-color)] transition-colors duration-200 font-sans disabled:bg-slate-600 disabled:cursor-wait whitespace-nowrap ${hoverTextColorClass}`;
-    if (site.isAnalyzing) {
-        return (
-            <button className={baseClasses} disabled>
-                <Loader />
-                <span className="ml-1.5">分析中...</span>
-            </button>
-        );
-    }
-    if (site.analysis) {
-        return <button onClick={() => handleViewAnalysis(site)} className={baseClasses}>查看分析</button>;
-    }
-    return (
-        <button onClick={() => handleAnalyzeWebsite(site)} className={baseClasses}>
-            <CommandLineIcon className="h-4 w-4 mr-1.5" />
-            <span>智能分析</span>
-        </button>
-    );
-  };
-
   return (
     <div 
       style={cardStyle}
@@ -89,7 +68,28 @@ export const WebsiteCard: React.FC<WebsiteCardProps> = memo(({ site, isFavorite:
           访问网站
           <ArrowUpRightIcon />
         </a>
-        <AnalysisButton />
+        
+        {/* Inline Analysis Button Logic */}
+        {(() => {
+          const baseClasses = `inline-flex items-center text-sm font-semibold text-white bg-slate-700/80 px-4 py-2 rounded-full hover:bg-[var(--theme-color)] transition-colors duration-200 font-sans disabled:bg-slate-600 disabled:cursor-wait whitespace-nowrap ${hoverTextColorClass}`;
+          if (site.isAnalyzing) {
+              return (
+                  <button className={baseClasses} disabled>
+                      <Loader />
+                      <span className="ml-1.5">分析中...</span>
+                  </button>
+              );
+          }
+          if (site.analysis) {
+              return <button onClick={() => handleViewAnalysis(site)} className={baseClasses}>查看分析</button>;
+          }
+          return (
+              <button onClick={() => handleAnalyzeWebsite(site)} className={baseClasses}>
+                  <CommandLineIcon className="h-4 w-4 mr-1.5" />
+                  <span>智能分析</span>
+              </button>
+          );
+        })()}
       </div>
     </div>
   );

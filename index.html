@@ -2,7 +2,7 @@
 <html lang="en" class="bg-slate-950">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>AzuTool - 全球公司发现工具</title>
     <!-- PWA -->
     <link rel="manifest" href="manifest.json" />
@@ -138,6 +138,31 @@
       .animate-fade-in {
         opacity: 0; /* Set initial state for animation */
         animation: fadeIn 0.6s ease-out forwards;
+      }
+      
+      /* APK / Mobile Safe Area support */
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      .pt-safe {
+        padding-top: env(safe-area-inset-top);
+      }
+      
+      /* Prevent layout shift - reserve space for media */
+      .media-container {
+        position: relative;
+        overflow: hidden;
+        background-color: #0f172a; /* slate-900 */
+        border-radius: 1rem;
+      }
+      
+      @keyframes pulsate {
+        0% { opacity: 0.1; }
+        50% { opacity: 0.3; }
+        100% { opacity: 0.1; }
+      }
+      .skeleton-pulse {
+        animation: pulsate 2s infinite ease-in-out;
       }
       @keyframes animated-gradient {
         0% { background-position: 0% 50%; }

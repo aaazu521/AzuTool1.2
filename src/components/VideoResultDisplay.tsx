@@ -34,8 +34,17 @@ const VideoCard: React.FC<{ item: VideoGenerationResultItem; aspectRatio: string
 
         const handleReady = () => {
             if (videoRef.current) { // Ensure ref is still valid
-                setIsPlaying(!videoRef.current.paused);
                 setIsInitialized(true);
+                // Handle autoplay manually to catch interruptions
+                const playPromise = videoRef.current.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch((e) => {
+                        console.warn('Autoplay interrupted:', e);
+                        setIsPlaying(false);
+                    });
+                } else {
+                    setIsPlaying(!videoRef.current.paused);
+                }
             }
         };
 
@@ -62,7 +71,12 @@ const VideoCard: React.FC<{ item: VideoGenerationResultItem; aspectRatio: string
         if (!video) return;
 
         if (video.paused) {
-            video.play();
+            const playPromise = video.play();
+            if (playPromise !== undefined) {
+                playPromise.catch((error) => {
+                    console.warn('Video play was interrupted:', error);
+                });
+            }
         } else {
             video.pause();
         }
@@ -116,9 +130,9 @@ const VideoCard: React.FC<{ item: VideoGenerationResultItem; aspectRatio: string
                 </button>
             </div>
             <div 
-                className="relative overflow-hidden bg-slate-800/50 w-full flex items-center justify-center cursor-pointer transition-[aspect-ratio] duration-500 ease-in-out min-h-[300px]"
+                className="relative overflow-hidden bg-slate-900 w-full flex items-center justify-center cursor-pointer transition-all duration-500 ease-in-out min-h-[200px] media-container"
                 style={{ 
-                    aspectRatio,
+                    aspectRatio: aspectRatio === 'auto' ? '9 / 16' : aspectRatio,
                 }}
             >
                 <video 
@@ -127,10 +141,10 @@ const VideoCard: React.FC<{ item: VideoGenerationResultItem; aspectRatio: string
                     src={item.url} 
                     title={item.title}
                     loop
-                    autoPlay
                     playsInline
-                    preload="auto"
+                    preload="metadata"
                     poster={item.thumbnail || ''}
+                    referrerPolicy="no-referrer"
                     onError={(e) => {
                         console.error(`Failed to load video: ${item.url}`);
                         // Try to use the original URL if it was proxied, as a last resort
@@ -175,7 +189,7 @@ const VideoResultsGrid: React.FC<VideoResultsGridProps> = memo(({ results }) => 
       <div className="flex flex-col gap-6">
         {results.map((result, index) => (
           <VideoCard 
-            key={result.item.url || index} 
+            key={`${result.item.url || index}-${index}`} 
             item={result.item} 
             aspectRatio={result.aspectRatio}
             style={{ animationDelay: `${index * 100}ms` }}
