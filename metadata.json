@@ -1,5 +1,6 @@
 {
-  "name": "AzuTool 1.1 ",
+  "name": "AzuTool 1.3",
   "description": "多功能采集与创作工具, 丝滑体验",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": []
 }
